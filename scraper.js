@@ -1,7 +1,7 @@
 const { chromium } = require('playwright');
 const fs = require('fs');
 
-const cities = ['madrid']; // luego añadimos más
+const cities = ['madrid'];
 
 (async () => {
 
@@ -9,9 +9,7 @@ const cities = ['madrid']; // luego añadimos más
     headless: true
   });
 
-  const page = await browser.newPage({
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36'
-  });
+  const page = await browser.newPage();
 
   let allDeals = [];
 
@@ -22,37 +20,39 @@ const cities = ['madrid']; // luego añadimos más
       console.log(`Scraping ${city}...`);
 
       await page.goto(`https://www.groupon.es/browse/${city}`, {
-        waitUntil: 'domcontentloaded',
+        waitUntil: 'networkidle',
         timeout: 60000
       });
 
-      // Espera fuerte (Groupon carga dinámico)
-      await page.waitForTimeout(8000);
+      // Esperar carga
+      await page.waitForTimeout(10000);
 
-      // Scroll para cargar más
-      await page.evaluate(async () => {
-        window.scrollBy(0, window.innerHeight);
-        await new Promise(r => setTimeout(r, 2000));
-      });
+      // Scroll varias veces
+      for (let i = 0; i < 5; i++) {
+        await page.evaluate(() => window.scrollBy(0, window.innerHeight));
+        await page.waitForTimeout(2000);
+      }
 
       const deals = await page.evaluate(() => {
 
-        const links = document.querySelectorAll('a[href*="/deals/"]');
-
         let results = [];
 
-        links.forEach(el => {
+        // selector 1
+        document.querySelectorAll('a[href*="/deals/"]').forEach(el => {
+          results.push({
+            title: el.innerText.trim(),
+            link: el.href
+          });
+        });
 
-          const title = el.innerText?.trim();
-          const link = el.href;
-
-          if (title && link) {
+        // selector 2 (fallback)
+        document.querySelectorAll('a').forEach(el => {
+          if (el.href.includes('/deals/')) {
             results.push({
-              title,
-              link
+              title: el.innerText.trim(),
+              link: el.href
             });
           }
-
         });
 
         return results;
@@ -70,17 +70,18 @@ const cities = ['madrid']; // luego añadimos más
     }
   }
 
-  // eliminar duplicados por URL
+  // limpiar duplicados y vacíos
   const uniqueDeals = Object.values(
-    allDeals.reduce((acc, deal) => {
-      acc[deal.link] = deal;
-      return acc;
-    }, {})
+    allDeals
+      .filter(d => d.title && d.link)
+      .reduce((acc, deal) => {
+        acc[deal.link] = deal;
+        return acc;
+      }, {})
   );
 
   console.log(`Total únicos: ${uniqueDeals.length}`);
 
-  // SIEMPRE generar archivo
   fs.writeFileSync('deals.json', JSON.stringify(uniqueDeals, null, 2));
 
   console.log("✅ JSON generado");
