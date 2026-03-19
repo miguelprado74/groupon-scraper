@@ -1,91 +1,46 @@
-const { chromium } = require('playwright');
 const fs = require('fs');
 
 const cities = ['madrid'];
 
-(async () => {
+async function getDeals(city) {
 
-  const browser = await chromium.launch({
-    headless: false
+  const url = `https://www.groupon.es/occasions/api/v2/browse?locale=es_ES&division=${city}&offset=0&limit=24`;
+
+  const res = await fetch(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0',
+      'Accept': 'application/json'
+    }
   });
 
-  const page = await browser.newPage();
+  const data = await res.json();
+
+  return data.deals.map(d => ({
+    title: d.title,
+    price: d.price?.formattedAmount,
+    image: d.grid4ImageUrl,
+    link: `https://www.groupon.es/deals/${d.dealUrl}`,
+    city
+  }));
+}
+
+(async () => {
 
   let allDeals = [];
 
   for (const city of cities) {
-
     try {
-
-      console.log(`Scraping ${city}...`);
-
-      await page.goto(`https://www.groupon.es/ofertas/${city}`, {
-        waitUntil: 'networkidle',
-        timeout: 60000
-      });
-
-      // Esperar carga
-      await page.waitForTimeout(10000);
-
-      // Scroll varias veces
-      for (let i = 0; i < 5; i++) {
-        await page.evaluate(() => window.scrollBy(0, window.innerHeight));
-        await page.waitForTimeout(2000);
-      }
-
-      const deals = await page.evaluate(() => {
-
-        let results = [];
-
-        // selector 1
-        document.querySelectorAll('a[href*="/deals/"]').forEach(el => {
-          results.push({
-            title: el.innerText.trim(),
-            link: el.href
-          });
-        });
-
-        // selector 2 (fallback)
-        document.querySelectorAll('a').forEach(el => {
-          if (el.href.includes('/deals/')) {
-            results.push({
-              title: el.innerText.trim(),
-              link: el.href
-            });
-          }
-        });
-
-        return results;
-      });
-
+      console.log(`Fetching ${city}...`);
+      const deals = await getDeals(city);
       console.log(`Encontrados: ${deals.length}`);
-
-      allDeals.push(...deals.map(d => ({
-        ...d,
-        city
-      })));
-
+      allDeals.push(...deals);
     } catch (err) {
       console.log(`Error en ${city}:`, err.message);
     }
   }
 
-  // limpiar duplicados y vacíos
-  const uniqueDeals = Object.values(
-    allDeals
-      .filter(d => d.title && d.link)
-      .reduce((acc, deal) => {
-        acc[deal.link] = deal;
-        return acc;
-      }, {})
-  );
-
-  console.log(`Total únicos: ${uniqueDeals.length}`);
-
-  fs.writeFileSync('deals.json', JSON.stringify(uniqueDeals, null, 2));
+  fs.writeFileSync('deals.json', JSON.stringify(allDeals, null, 2));
 
   console.log("✅ JSON generado");
-
-  await browser.close();
 
 })();
