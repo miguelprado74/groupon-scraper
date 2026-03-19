@@ -19,7 +19,7 @@ const cities = ['madrid'];
 
       console.log(`Scraping ${city}...`);
 
-      await page.goto(`https://www.groupon.es/browse/${city}`, {
+      await page.goto(`https://www.groupon.es/ofertas/${city}`, {
         waitUntil: 'networkidle',
         timeout: 60000
       });
