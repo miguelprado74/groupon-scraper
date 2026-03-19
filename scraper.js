@@ -1,40 +1,82 @@
-const { chromium } = require('playwright');
 const fs = require('fs');
+
+const cities = ['madrid'];
+
+async function fetchHTML(url) {
+  const res = await fetch(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+      'Accept-Language': 'es-ES,es;q=0.9'
+    }
+  });
+
+  return await res.text();
+}
+
+function extractDeals(html, city) {
+
+  const deals = [];
+
+  // regex para bloques de ofertas
+  const regex = /<a[^>]+href="(\/deals\/[^"]+)"[^>]*>(.*?)<\/a>/gs;
+
+  let match;
+
+  while ((match = regex.exec(html)) !== null) {
+
+    const link = 'https://www.groupon.es' + match[1];
+
+    // limpiar texto
+    const text = match[2]
+      .replace(/<[^>]+>/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (text.length > 20) {
+      deals.push({
+        title: text,
+        link,
+        city
+      });
+    }
+  }
+
+  return deals;
+}
 
 (async () => {
 
-  const browser = await chromium.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
-  });
+  let allDeals = [];
 
-  const page = await browser.newPage();
+  for (const city of cities) {
 
-  await page.goto('https://www.groupon.es/browse/madrid', {
-    waitUntil: 'domcontentloaded',
-    timeout: 60000
-  });
+    console.log(`Fetching ${city}...`);
 
-  // esperar carga real
-  await page.waitForTimeout(10000);
+    const url = `https://www.groupon.es/browse/${city}`;
 
-  // forzar scroll
-  for (let i = 0; i < 6; i++) {
-    await page.mouse.wheel(0, 2000);
-    await page.waitForTimeout(2000);
+    try {
+      const html = await fetchHTML(url);
+      const deals = extractDeals(html, city);
+
+      console.log(`Encontrados: ${deals.length}`);
+
+      allDeals.push(...deals);
+
+    } catch (err) {
+      console.log(`Error en ${city}:`, err.message);
+    }
   }
 
-  const deals = await page.evaluate(() => {
-    return Array.from(document.querySelectorAll('a')).map(a => ({
-      title: a.innerText.trim(),
-      link: a.href
-    })).filter(d => d.link.includes('/deals/') && d.title.length > 10);
-  });
+  // deduplicar
+  const unique = Object.values(
+    allDeals.reduce((acc, d) => {
+      acc[d.link] = d;
+      return acc;
+    }, {})
+  );
 
-  fs.writeFileSync('deals.json', JSON.stringify(deals, null, 2));
+  fs.writeFileSync('deals.json', JSON.stringify(unique, null, 2));
 
-  console.log("Deals:", deals.length);
-
-  await browser.close();
+  console.log("✅ JSON generado:", unique.length);
 
 })();
