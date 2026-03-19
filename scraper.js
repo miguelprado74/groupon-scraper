@@ -1,46 +1,40 @@
+const { chromium } = require('playwright');
 const fs = require('fs');
-
-const cities = ['madrid'];
-
-async function getDeals(city) {
-
-  const url = `https://www.groupon.es/occasions/api/v2/browse?locale=es_ES&division=${city}&offset=0&limit=24`;
-
-  const res = await fetch(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0',
-      'Accept': 'application/json'
-    }
-  });
-
-  const data = await res.json();
-
-  return data.deals.map(d => ({
-    title: d.title,
-    price: d.price?.formattedAmount,
-    image: d.grid4ImageUrl,
-    link: `https://www.groupon.es/deals/${d.dealUrl}`,
-    city
-  }));
-}
 
 (async () => {
 
-  let allDeals = [];
+  const browser = await chromium.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  });
 
-  for (const city of cities) {
-    try {
-      console.log(`Fetching ${city}...`);
-      const deals = await getDeals(city);
-      console.log(`Encontrados: ${deals.length}`);
-      allDeals.push(...deals);
-    } catch (err) {
-      console.log(`Error en ${city}:`, err.message);
-    }
+  const page = await browser.newPage();
+
+  await page.goto('https://www.groupon.es/browse/madrid', {
+    waitUntil: 'domcontentloaded',
+    timeout: 60000
+  });
+
+  // esperar carga real
+  await page.waitForTimeout(10000);
+
+  // forzar scroll
+  for (let i = 0; i < 6; i++) {
+    await page.mouse.wheel(0, 2000);
+    await page.waitForTimeout(2000);
   }
 
-  fs.writeFileSync('deals.json', JSON.stringify(allDeals, null, 2));
+  const deals = await page.evaluate(() => {
+    return Array.from(document.querySelectorAll('a')).map(a => ({
+      title: a.innerText.trim(),
+      link: a.href
+    })).filter(d => d.link.includes('/deals/') && d.title.length > 10);
+  });
 
-  console.log("✅ JSON generado");
+  fs.writeFileSync('deals.json', JSON.stringify(deals, null, 2));
+
+  console.log("Deals:", deals.length);
+
+  await browser.close();
 
 })();
