@@ -2,8 +2,8 @@ name: Groupon Scraper
 
 on:
   schedule:
-    - cron: "0 */6 * * *" # cada 6 horas
-  workflow_dispatch: # botón manual
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
 
 jobs:
   scrape:
@@ -21,18 +21,14 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps
-
       - name: Run scraper
         run: node scraper.js
 
-  
-- name: Commit JSON
-  run: |
-    git config --global user.name "bot"
-    git config --global user.email "bot@example.com"
-    git add deals.json
-    git diff --quiet && git diff --staged --quiet || git commit -m "update deals"
-    git pull --rebase origin main
-    git push
+      - name: Commit JSON
+        run: |
+          git config --global user.name "bot"
+          git config --global user.email "bot@example.com"
+          git add deals.json
+          git diff --quiet && git diff --staged --quiet || git commit -m "update deals"
+          git pull --rebase origin main
+          git push
