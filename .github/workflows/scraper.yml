@@ -27,10 +27,12 @@ jobs:
       - name: Run scraper
         run: node scraper.js
 
-      - name: Commit JSON
-        run: |
-          git config --global user.name "bot"
-          git config --global user.email "bot@example.com"
-          git add deals.json
-          git commit -m "update deals" || echo "no changes"
-          git push
+  
+- name: Commit JSON
+  run: |
+    git config --global user.name "bot"
+    git config --global user.email "bot@example.com"
+    git add deals.json
+    git diff --quiet && git diff --staged --quiet || git commit -m "update deals"
+    git pull --rebase origin main
+    git push
