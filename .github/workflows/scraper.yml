@@ -1,0 +1,36 @@
+name: Groupon Scraper
+
+on:
+  schedule:
+    - cron: "0 */6 * * *" # cada 6 horas
+  workflow_dispatch: # botón manual
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: Run scraper
+        run: node scraper.js
+
+      - name: Commit JSON
+        run: |
+          git config --global user.name "bot"
+          git config --global user.email "bot@example.com"
+          git add deals.json
+          git commit -m "update deals" || echo "no changes"
+          git push
