@@ -5,37 +5,85 @@ const cities = ['madrid']; // luego añadimos más
 
 (async () => {
 
-  const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
+  const browser = await chromium.launch({
+    headless: true
+  });
+
+  const page = await browser.newPage({
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36'
+  });
 
   let allDeals = [];
 
   for (const city of cities) {
 
-    console.log(`Scraping ${city}...`);
+    try {
 
-    await page.goto(`https://www.groupon.es/browse/${city}`, {
-      waitUntil: 'networkidle'
-    });
+      console.log(`Scraping ${city}...`);
 
-    await page.waitForTimeout(5000);
+      await page.goto(`https://www.groupon.es/browse/${city}`, {
+        waitUntil: 'domcontentloaded',
+        timeout: 60000
+      });
 
-    const deals = await page.evaluate(() => {
-      const items = document.querySelectorAll('a[data-testid="deal-card"]');
+      // Espera fuerte (Groupon carga dinámico)
+      await page.waitForTimeout(8000);
 
-      return Array.from(items).map(el => ({
-        title: el.innerText,
-        link: el.href
-      }));
-    });
+      // Scroll para cargar más
+      await page.evaluate(async () => {
+        window.scrollBy(0, window.innerHeight);
+        await new Promise(r => setTimeout(r, 2000));
+      });
 
-    allDeals.push(...deals.map(d => ({
-      ...d,
-      city
-    })));
+      const deals = await page.evaluate(() => {
+
+        const links = document.querySelectorAll('a[href*="/deals/"]');
+
+        let results = [];
+
+        links.forEach(el => {
+
+          const title = el.innerText?.trim();
+          const link = el.href;
+
+          if (title && link) {
+            results.push({
+              title,
+              link
+            });
+          }
+
+        });
+
+        return results;
+      });
+
+      console.log(`Encontrados: ${deals.length}`);
+
+      allDeals.push(...deals.map(d => ({
+        ...d,
+        city
+      })));
+
+    } catch (err) {
+      console.log(`Error en ${city}:`, err.message);
+    }
   }
 
-  fs.writeFileSync('deals.json', JSON.stringify(allDeals, null, 2));
+  // eliminar duplicados por URL
+  const uniqueDeals = Object.values(
+    allDeals.reduce((acc, deal) => {
+      acc[deal.link] = deal;
+      return acc;
+    }, {})
+  );
+
+  console.log(`Total únicos: ${uniqueDeals.length}`);
+
+  // SIEMPRE generar archivo
+  fs.writeFileSync('deals.json', JSON.stringify(uniqueDeals, null, 2));
+
+  console.log("✅ JSON generado");
 
   await browser.close();
 
